@@ -3,6 +3,7 @@
 # 在Kaggle上抓了一個比特幣的資料集，運用兩個model: fbprophet、 SARIMA，做資料清洗及decompose、smooth以後，經檢查他的stationy後，即餵入模型，
 # 餵入模型後跑出約2%的預測值，再來比對mean_squard_error，以確認模型誤差值可使用性。
 # 經測試後，選mean_squard_error 較小者(fbprophet)，做實際值(2024/12/31 14:37 PM close price forecasting : 62702.600675276684
+# dataset : https://www.kaggle.com/datasets/imranbukhari/comprehensive-btcusd-1m-data
 
 import pandas as pd
 import numpy as np
