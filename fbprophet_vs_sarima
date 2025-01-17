@@ -1,0 +1,209 @@
+# 人生中第一個完整的AI分析小專案，題目訂得不大，重點是程式檔切實可行，花了快2個禮拜吧，但中間的模型練習及研究等等，花的時間當然不只。
+# 是一個很樸實完整的小作品，也希望他是切實可行有實際參考價值的分析建議。
+# 在Kaggle上抓了一個比特幣的資料集，運用兩個model: fbprophet、 SARIMA，做資料清洗及decompose、smooth以後，經檢查他的stationy後，即餵入模型，
+# 餵入模型後跑出約2%的預測值，再來比對mean_squard_error，以確認模型誤差值可使用性。
+# 經測試後，選mean_squard_error 較小者(fbprophet)，做實際值(2024/12/31 14:37 PM close price forecasting : 62702.600675276684
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import prophet
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+def for_fbprophet():
+    raw_data = pd.read_csv(r"C:\Users\user\.cache\kagglehub\datasets\imranbukhari\comprehensive-btcusd-1m-data\versions\28\BTCUSD_1m_Combined_Index.csv")
+    raw_data_c = raw_data.copy()
+
+    data = pd.DataFrame()
+    data["ds"] = raw_data_c["Open time"]
+    data["y"] = raw_data_c["Close"]
+    data = data[::120]
+    data["ds"] = pd.to_datetime(data["ds"])
+    #print(len(data)) = 57866
+    
+    # version 1
+
+    train_data = data[:57287]
+    #test_x = data[57287:]["ds"]
+    test_y_true = data[57287:]["y"]
+    #print(test_x.values)
+
+    test_x = pd.DataFrame(data[57287:]["ds"], columns=["ds"])
+    test_x["ds"] = pd.to_datetime(test_x["ds"])
+    
+    model = prophet.Prophet()
+    model.fit(train_data)
+   
+    y_pred = model.predict(test_x)
+    print("Mean squared error: %.2f"
+      % mean_squared_error(test_y_true, y_pred["trend"]))
+    
+    model.plot(y_pred)
+    plt.plot(data.ds, data.y, label="original")
+    plt.legend()
+    plt.show()
+
+for_fbprophet()
+
+def diff1():
+    raw_data = pd.read_csv(r"C:\Users\user\.cache\kagglehub\datasets\imranbukhari\comprehensive-btcusd-1m-data\versions\28\BTCUSD_1m_Combined_Index.csv")
+    raw_data_c = raw_data.copy()
+    #raw_data_c.head()
+
+    data = pd.DataFrame()
+    data["ds"] = raw_data_c["Open time"]
+    data["y"] = raw_data_c["Close"]
+    data = data[::120]
+    data["ds"] = pd.to_datetime(data["ds"])
+    #data.head()
+
+    smoothed_data = data.diff(1)
+    smoothed_data["ds"][0] = 0
+    smoothed_data["y"][0] = 0
+    print(smoothed_data)
+    plt.plot(data.ds, smoothed_data.y, label="diff1")
+    plt.legend()
+    plt.show()
+
+    return smoothed_data
+
+diff1()
+
+def check_stationarity(timeseries):
+    # Perform the Dickey-Fuller test
+    result = adfuller(timeseries, autolag='AIC')
+    p_value = result[1]
+    print(f'ADF Statistic: {result[0]}')
+    print(f'p-value: {p_value}')
+    print('Stationary' if p_value < 0.05 else 'Non-Stationary')
+
+test = diff1()
+check_stationarity(test["y"])
+
+def sarima():
+    #identify the data
+    raw_data = pd.read_csv(r"C:\Users\user\.cache\kagglehub\datasets\imranbukhari\comprehensive-btcusd-1m-data\versions\28\BTCUSD_1m_Combined_Index.csv")
+    raw_data_c = raw_data.copy()
+
+    data = pd.DataFrame()
+    data["ds"] = raw_data_c["Open time"]
+    data["y"] = raw_data_c["Close"]
+    data = data[::120]
+    data["ds"] = pd.to_datetime(data["ds"])
+    #print(len(data)) = 57866
+    
+    # version 1
+
+    train_data = data[:56709]
+    #test_x = data[56709:]["ds"]
+    test_y_true = data[56709:]["y"]
+    #print(test_x.values)
+
+    test_x = pd.DataFrame(data[56709:]["ds"], columns=["ds"])
+    test_x["ds"] = pd.to_datetime(test_x["ds"])
+
+    # smoothed data
+    smoothed_data = data.diff(1)
+    smoothed_data["ds"][0] = 0
+    smoothed_data["y"][0] = 0
+    
+    # Define SARIMA parameters
+    p, d, q = 1, 1, 1
+    P, D, Q, s = 1, 1, 1, 12  # Assuming daily seasonality
+
+    # Fit the SARIMA model
+    model = SARIMAX(smoothed_data["y"][:56709], order=(p, d, q), seasonal_order=(P, D, Q, s))
+    results = model.fit()
+    #model
+
+    forecast_periods = 1157  # 2% test samples
+    forecast = results.get_forecast(steps=forecast_periods)
+    forecast_mean = forecast.predicted_mean
+    forecast_ci = forecast.conf_int()
+    print(forecast_mean)
+
+    plotsarima_y = pd.concat([smoothed_data["y"][:56709],forecast_mean], axis=0 ) 
+
+    #print(test_y_true["y"])
+    print("Mean squared error: %.2f"
+      % mean_squared_error(test_y_true, forecast_mean.values))
+
+    plt.plot(data.ds, smoothed_data.y, label="original")
+    plt.plot(data.ds, plotsarima_y, label="sarima predict")
+    plt.legend()
+    plt.show()
+
+sarima()
+
+# so, fbprophet vs sarima, comdition: 2% prediction, fbprophet wins, but, still, the accuracy needs to be improved.
+# choose fbprophet to prophet the next 744 points
+
+from datetime import datetime, timedelta
+def fbprophet_for_true_prediction():
+    raw_data = pd.read_csv(r"C:\Users\user\.cache\kagglehub\datasets\imranbukhari\comprehensive-btcusd-1m-data\versions\28\BTCUSD_1m_Combined_Index.csv")
+    raw_data_c = raw_data.copy()
+
+    data = pd.DataFrame()
+    data["ds"] = raw_data_c["Open time"]
+    data["y"] = raw_data_c["Close"]
+    data = data[::120]
+    data["ds"] = pd.to_datetime(data["ds"])
+    #print(len(data)) = 57866
+
+    data.reset_index(inplace=True)
+    # version 1
+
+    #train_data = data[:57287]
+    #test_x = data[57287:]["ds"]
+    #test_y_true = data[57287:]["y"]
+    #print(test_x.values)
+
+    #test_x = pd.DataFrame(data[57287:]["ds"], columns=["ds"])
+    #test_x["ds"] = pd.to_datetime(test_x["ds"])
+
+    #print(data[6:19]) 12 /day
+    #print(data.tail())
+
+    # produce test_x
+    time_deltas = timedelta(hours=2)
+    predict_time = []
+    a = pd.to_datetime("2024-10-30 14:37:00")
+    for unit in range(744):
+        a += time_deltas
+        predict_time.append(a)
+     
+    test_x = pd.Series()
+    b = -1
+    for i in predict_time:
+        b += 1
+        test_x[b] = i
+    test_x = pd.to_datetime(test_x)
+    transform_test_x = pd.DataFrame()
+    transform_test_x["ds"] = test_x
+    
+    #print(transform_test_x)
+
+    model = prophet.Prophet()
+    model.fit(data)
+   
+    y_pred = model.predict(transform_test_x)
+      
+    model.plot(y_pred)
+    plt.plot(data.ds, data.y, label="original")
+    plt.legend()
+    plt.show()
+
+    print("predict 2024/12/31 14:37 PM close price:", y_pred["trend"][743])
+
+    # the result
+    #lastvalue = y_pred["trend"][-1]
+    #print("Predict value:",lastvalue)
+    #if data["y"][-1] > lastvalue:
+        #print("The trend comes to crump, don't dig in.")
+    #else:
+        #print("The trend comes to climb, go ahead.")
+        
+fbprophet_for_true_prediction()
